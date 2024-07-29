@@ -109,13 +109,13 @@ resource "azurerm_network_security_group" "appnsg" {
   resource_group_name = local.resource_group_name
 
   security_rule {
-    name                       = "AllowRDP"
+    name                       = "AllowSSH"
     priority                   = 300
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_range     = "3389"
+    destination_port_range     = "22"
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
@@ -128,13 +128,17 @@ resource "azurerm_subnet_network_security_group_association" "appnsglink" {
   network_security_group_id = azurerm_network_security_group.appnsg.id
 }
 
-resource "azurerm_windows_virtual_machine" "appvm" {
-  name                = "appvm"
+resource "azurerm_linux_virtual_machine" "linuxvm" {
+  name                = "linuxvm"
   resource_group_name = local.resource_group_name
   location            = local.location
-  size                = "Standard_D2S_v3"
+  size                = "Standard_D2s_v3"
   admin_username      = var.admin_username
-  admin_password      = var.admin_password
+  # admin_password      = var.admin_password
+  admin_ssh_key {
+    username   = var.admin_username
+    public_key = tls_private_key.linuxkey.public_key_openssh
+  }
   network_interface_ids = [
     azurerm_network_interface.appinterface.id,
   ]
@@ -145,34 +149,45 @@ resource "azurerm_windows_virtual_machine" "appvm" {
   }
 
   source_image_reference {
-    publisher = "MicrosoftWindowsServer"
-    offer     = "WindowsServer"
-    sku       = "2019-Datacenter"
+    publisher = "Canonical"
+    offer     = "001-com-ubuntu-server-focal"
+    sku       = "20_04-lts"
     version   = "latest"
   }
 
-  depends_on = [ azurerm_network_interface.appinterface, azurerm_resource_group.appgrp ]
+  depends_on = [ azurerm_network_interface.appinterface, azurerm_resource_group.appgrp, tls_private_key.linuxkey ]
 }
 
-resource "azurerm_managed_disk" "appdisk" {
-  name                 = "appdisk"
-  location             = local.location
-  resource_group_name  = local.resource_group_name
-  storage_account_type = "Standard_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = "1"
-
-  tags = {
-    environment = "staging"
-  }
+resource "tls_private_key" "linuxkey" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
 }
 
-resource "azurerm_virtual_machine_data_disk_attachment" "appdiskattach" {
-  managed_disk_id    = azurerm_managed_disk.appdisk.id
-  virtual_machine_id = azurerm_windows_virtual_machine.appvm.id
-  lun                = "10"
-  caching            = "ReadWrite"
+resource "local_file" "linuxkey" {
+  content  = tls_private_key.linuxkey.private_key_pem
+  filename = "linuxkey.pem"
+  depends_on = [ tls_private_key.linuxkey ]
 }
+
+# resource "azurerm_managed_disk" "appdisk" {
+#   name                 = "appdisk"
+#   location             = local.location
+#   resource_group_name  = local.resource_group_name
+#   storage_account_type = "Standard_LRS"
+#   create_option        = "Empty"
+#   disk_size_gb         = "1"
+
+#   tags = {
+#     environment = "staging"
+#   }
+# }
+
+# resource "azurerm_virtual_machine_data_disk_attachment" "appdiskattach" {
+#   managed_disk_id    = azurerm_managed_disk.appdisk.id
+#   virtual_machine_id = azurerm_windows_virtual_machine.linuxvm.id
+#   lun                = "10"
+#   caching            = "ReadWrite"
+# }
 
 
 output "public_ip_address" {
