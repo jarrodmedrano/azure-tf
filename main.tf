@@ -1,23 +1,3 @@
-terraform {
-  required_providers {
-    azurerm = {
-      source = "hashicorp/azurerm"
-      version = "3.113.0"
-    }
-  }
-}
-
-provider "azurerm" {
-  # Configuration options
-  subscription_id = var.subscription_id
-  tenant_id = var.tenant_id
-  client_id = var.client_id
-  client_secret = var.client_secret
-  features {
-
-  }
-}
-
 locals {
   resource_group_name = "app-grp"
   location = "East US"
@@ -121,6 +101,77 @@ resource "azurerm_network_interface" "appinterface" {
   depends_on = [
     azurerm_virtual_network.appnetwork
   ]
+}
+
+resource "azurerm_network_security_group" "appnsg" {
+  name                = "app-nsg"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+
+  security_rule {
+    name                       = "AllowRDP"
+    priority                   = 300
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
+  depends_on = [ azurerm_resource_group.appgrp ]
+}
+
+resource "azurerm_subnet_network_security_group_association" "appnsglink" {
+  subnet_id                 = azurerm_subnet.subnetA.id
+  network_security_group_id = azurerm_network_security_group.appnsg.id
+}
+
+resource "azurerm_windows_virtual_machine" "appvm" {
+  name                = "appvm"
+  resource_group_name = local.resource_group_name
+  location            = local.location
+  size                = "Standard_D2S_v3"
+  admin_username      = var.admin_username
+  admin_password      = var.admin_password
+  network_interface_ids = [
+    azurerm_network_interface.appinterface.id,
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2019-Datacenter"
+    version   = "latest"
+  }
+
+  depends_on = [ azurerm_network_interface.appinterface, azurerm_resource_group.appgrp ]
+}
+
+resource "azurerm_managed_disk" "appdisk" {
+  name                 = "appdisk"
+  location             = local.location
+  resource_group_name  = local.resource_group_name
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = "1"
+
+  tags = {
+    environment = "staging"
+  }
+}
+
+resource "azurerm_virtual_machine_data_disk_attachment" "appdiskattach" {
+  managed_disk_id    = azurerm_managed_disk.appdisk.id
+  virtual_machine_id = azurerm_windows_virtual_machine.appvm.id
+  lun                = "10"
+  caching            = "ReadWrite"
 }
 
 
