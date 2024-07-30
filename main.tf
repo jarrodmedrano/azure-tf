@@ -132,7 +132,7 @@ resource "azurerm_linux_virtual_machine" "linuxvm" {
   name                = "linuxvm"
   resource_group_name = local.resource_group_name
   location            = local.location
-  size                = "Standard_D2s_v3"
+  size                = "Standard_B2pls_v2"
   admin_username      = var.admin_username
   # admin_password      = var.admin_password
   admin_ssh_key {
@@ -148,12 +148,12 @@ resource "azurerm_linux_virtual_machine" "linuxvm" {
     storage_account_type = "Standard_LRS"
   }
 
-  source_image_reference {
+source_image_reference {
     publisher = "Canonical"
-    offer     = "001-com-ubuntu-server-focal"
-    sku       = "20_04-lts"
+    offer     = "ubuntu-24_04-lts"
+    sku       = "server-arm64"  # Hypothetical SKU for ARM64
     version   = "latest"
-  }
+}
 
   depends_on = [ azurerm_network_interface.appinterface, azurerm_resource_group.appgrp, tls_private_key.linuxkey ]
 }
@@ -190,6 +190,6 @@ resource "local_file" "linuxkey" {
 # }
 
 
-output "public_ip_address" {
-  value = azurerm_public_ip.appip.ip_address
-}
+# output "public_ip_address" {
+#   value = azurerm_public_ip.appip.ip_address
+# }
